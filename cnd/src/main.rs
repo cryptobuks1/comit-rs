@@ -32,7 +32,7 @@ use cnd::{
 use rand::rngs::OsRng;
 use std::{process, sync::Arc};
 use structopt::StructOpt;
-use tokio::runtime;
+use tokio::{net::TcpListener, runtime};
 mod cli;
 mod trace;
 
@@ -142,10 +142,10 @@ fn main() -> anyhow::Result<()> {
     };
 
     runtime.block_on(load_swaps::load_swaps_from_database(deps.clone()))?;
-    runtime.spawn(spawn_warp_instance(settings, deps));
 
-    // Block the current thread.
-    ::std::thread::park();
+    let http_server_future = spawn_warp_instance(settings, deps);
+    runtime.block_on(http_server_future)?;
+
     Ok(())
 }
 
@@ -160,14 +160,16 @@ fn version() {
     println!("{} {} ({})", name, version, short);
 }
 
-async fn spawn_warp_instance(settings: Settings, dependencies: Facade) {
+async fn spawn_warp_instance(settings: Settings, dependencies: Facade) -> anyhow::Result<()> {
     let routes = route_factory::create(dependencies, &settings.http_api.cors.allowed_origins);
 
     let listen_addr = settings.http_api.socket;
+    let listener = TcpListener::bind(listen_addr).await?;
 
-    tracing::info!("Starting HTTP server on {}", listen_addr);
+    tracing::info!("Starting HTTP server on {} ...", listen_addr);
+    warp::serve(routes).serve_incoming(listener).await;
 
-    warp::serve(routes).bind(listen_addr).await
+    Ok(())
 }
 
 #[allow(clippy::print_stdout)] // We cannot use `log` before we have the config file
