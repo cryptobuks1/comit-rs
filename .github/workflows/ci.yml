@@ -79,25 +79,33 @@ jobs:
         if: matrix.os != 'macos-latest'
         run: make test
 
+      # Store a cnd ${{ matrix.os }} archive that contains the cnd binary
       - name: Upload cnd ${{ matrix.os }} binary
-        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v1
         with:
-          name: cnd
+          name: cnd-${{ matrix.os }}
           path: target/debug/cnd
 
-
   e2e_test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            binary-suffix: ""
+          - os: macos-latest
+            binary-suffix: ""
+    runs-on: ${{ matrix.os }}
     needs: build
     steps:
       - name: Checkout sources
         uses: actions/checkout@v1
 
+      # Note that the action unpacks cnd from cnd-${{ matrix.os }}
       - name: Download cnd binary
         uses: actions/download-artifact@v1
         with:
-          name: cnd
+          name: cnd-${{ matrix.os }}
           path: target/debug/
 
       - name: Fix missing executable permission
